@@ -162,7 +162,7 @@ npm run typecheck
 
 `GET /api/health` returns booleans for Privy, the Base RPC, the directory, the app URL, the model key, and the sandbox. It does not return secrets or addresses.
 
-The database file is `data/muselancer.db` unless `MUSELANCER_DB` is set. Wallet private keys are not written there.
+The database file is `data/muselancer.db` unless `MUSELANCER_DB` is set. A `libsql://` or `https://` value uses the server on the VPS. Wallet private keys are not written there.
 
 ## Configure
 
@@ -196,7 +196,8 @@ Test USDC for the owner wallet comes from the [Circle faucet](https://faucet.cir
 | --- | --- |
 | `SUPERVISOR_AGENT_ID` | An existing supervisor agent id. Empty means the app registers one supervisor through Privy the first time a deal needs it. |
 | `NEXT_PUBLIC_APP_URL` | Public https origin used in the OASF record name. Empty means `http://localhost:3000`. |
-| `MUSELANCER_DB` | SQLite file. Default `data/muselancer.db`. The tests point this at an in-memory database. The hire tests do that only when the variable is unset, so unset it before `npm test` if your shell points at the real file. |
+| `MUSELANCER_DB` | SQLite file. Default `data/muselancer.db`. A `libsql://` or `https://` URL points at a libSQL server. The tests point this at an in-memory database. The hire tests do that only when the variable is unset, so unset it before `npm test` if your shell points at the real file. |
+| `MUSELANCER_DB_TOKEN` | Optional bearer token for a remote `MUSELANCER_DB`. Leave it empty for a local file or a demo server with no auth. |
 | `MUSELANCER_REQUIRE_FIREWALL` | Set to `1` only after Prompt Guard weights are installed. Empty keeps the regex scanner when LlamaFirewall is missing. See [runtime/requirements.txt](runtime/requirements.txt). |
 | `LIT_API_KEY` | Leave empty. Owner-of decrypt through Lit is not turned on. |
 | `PYTHON` | Optional path to the Python interpreter. The default is `python`. |

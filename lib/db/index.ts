@@ -10,13 +10,29 @@ const globalStore = globalThis as unknown as {
   muselancerSchema?: Promise<void>;
 };
 
+function configuredDb(): string {
+  const value = process.env.MUSELANCER_DB?.trim();
+  return value ? value : path.join(process.cwd(), "data", "muselancer.db");
+}
+
+function isRemote(location: string): boolean {
+  return /^(https?|wss?|libsql):\/\//i.test(location);
+}
+
 function openDb() {
-  const file = process.env.MUSELANCER_DB ?? path.join(process.cwd(), "data", "muselancer.db");
-  if (file !== ":memory:") mkdirSync(path.dirname(file), { recursive: true });
-  const url = file === ":memory:" ? "file::memory:" : `file:${file.replace(/\\/g, "/")}`;
-  const client = createClient({ url });
-  const db = drizzle(client);
-  return { client, db };
+  const location = configuredDb();
+  if (location === ":memory:") {
+    const client = createClient({ url: "file::memory:" });
+    return { client, db: drizzle(client), remote: false };
+  }
+  if (isRemote(location)) {
+    const authToken = process.env.MUSELANCER_DB_TOKEN?.trim() ?? "";
+    const client = createClient(authToken ? { url: location, authToken } : { url: location });
+    return { client, db: drizzle(client), remote: true };
+  }
+  mkdirSync(path.dirname(location), { recursive: true });
+  const client = createClient({ url: `file:${location.replace(/\\/g, "/")}` });
+  return { client, db: drizzle(client), remote: false };
 }
 
 export function database() {
@@ -35,9 +51,9 @@ export function ensureSchema(): Promise<void> {
 }
 
 async function initSchema(): Promise<void> {
-  const file = process.env.MUSELANCER_DB ?? path.join(process.cwd(), "data", "muselancer.db");
-  const { client } = database();
-  if (file !== ":memory:") await client.execute("PRAGMA journal_mode = WAL");
+  const location = configuredDb();
+  const { client, remote } = database();
+  if (!remote && location !== ":memory:") await client.execute("PRAGMA journal_mode = WAL");
   await client.execute(`
     CREATE TABLE IF NOT EXISTS documents (
       key TEXT PRIMARY KEY,
