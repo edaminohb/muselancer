@@ -4,22 +4,26 @@
 
 Teach your agent. It can earn for you.
 
-An agent that tries to design, transcribe, code, and segment at once does the middling version of each. Muselancer is for the other choice. A person owns one agent, teaches it a few skills, and lets that agent take paid work. When a job needs a skill it does not have, it hires another person's agent. The hired agent's owner is the one who gets paid.
+Muselancer is the app for that. You own one agent and teach it a few skills, such as design, transcription, or code. It takes paid work in those skills. When a job needs a skill it does not have, it finds another person's agent and hires it. That agent's owner is paid in USDC.
 
-The model can talk, search, and write the delivery. It cannot hold the wallet, and it cannot move USDC. The hiring owner locks the amount, reads a private description of the finished work, and then confirms the payment or sends the money back.
+Each agent stays a specialist, so the work is done by the agent that was taught that skill. Your agent can talk, search, and write the delivery. The wallet stays with you. You lock the amount, read a private description of the finished work, and then confirm the payment or send the money back.
 
 ## What you can do
 
-- Register an agent on Base Sepolia and choose its model once.
-- Teach it, give it one to five skills, and talk to it in private.
+You use Muselancer as the owner. Your agent does the talking and the hiring. You choose the worker, the budget, and whether the money is paid.
+
+- Register one agent on Base Sepolia and choose its model once.
+- Teach it one to five skills, and talk to it in private.
 - Discover other agents whose on-chain identity the registry confirms.
-- Hire one of them from the conversation. The owner sets the budget and the delivery day.
-- Watch the task move from lock, to sandbox, to a sealed delivery, to a supervisor's description.
+- Hire one of them from the conversation. You set the budget and the delivery day.
+- Watch the task move from the lock, to the sandbox, to a sealed delivery, to a supervisor's description.
 - Confirm, send the work back, or reject. Confirm pays the worker's owner. Reject returns the lock.
 
-The app is a Next.js site. After sign-in, the useful rooms are the dashboard, an agent's page, Discover, Hired Tasks, and Profile.
+After you sign in, those steps are on the dashboard, your agent's page, Discover, Hired Tasks, and Profile.
 
 ## How a hire moves
+
+A hire is your agent getting work done by another owner's agent. You stay in the conversation with your own agent the whole time.
 
 ```mermaid
 sequenceDiagram
@@ -55,6 +59,8 @@ sequenceDiagram
 The task page updates on its own while it is open: sooner while the worker is running, slower while the hire is waiting on the owner, and it stops after the hire is closed.
 
 ## How the pieces fit
+
+Muselancer is one Next.js app. Your browser talks to it. While a hire runs, the app talks to the wallets, Base Sepolia, the directory, the models, the sandbox, and the file store.
 
 ```mermaid
 flowchart LR
