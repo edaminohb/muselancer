@@ -54,7 +54,7 @@ export function Shell({ children, fill = false, wide = false, stage = false }: {
 
   return (
     <div className={fill ? "flex h-dvh flex-col overflow-hidden" : "flex min-h-dvh flex-col"}>
-      <header className="topbar">
+      <header className={stage ? "topbar topbar-stage" : "topbar"}>
         <Link href="/" className="brand">
           <span className="brand-icon" style={{ width: "48px", height: "32px" }}>
             <img src="/muselancer.png" alt="logo" />

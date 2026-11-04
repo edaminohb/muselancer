@@ -945,6 +945,10 @@ h1.brief-title em {
   backdrop-filter: blur(22px) saturate(1.25);
 }
 
+.topbar-stage .account {
+  display: none;
+}
+
 .topbar::after {
   content: "";
   position: absolute;
@@ -1081,6 +1085,47 @@ html[data-theme="dark"] .theme-dot {
 
 .stage-solo {
   grid-template-columns: minmax(0, 40rem);
+}
+
+.landing {
+  grid-template-columns: minmax(0, 40rem);
+  justify-content: center;
+  align-content: center;
+  min-height: calc(100dvh - 3.65rem);
+  padding-top: clamp(2.5rem, 8vh, 5rem);
+  padding-bottom: clamp(3rem, 8vh, 5rem);
+}
+
+.landing h1.display {
+  max-width: 100%;
+  font-size: clamp(2.8rem, 5.2vw, 4.15rem);
+}
+
+.landing .stage-lede {
+  max-width: 38rem;
+  margin-top: 1.5rem;
+  font-size: 1.22rem;
+  line-height: 1.55;
+}
+
+.landing-action {
+  margin-top: 2.15rem;
+}
+
+.landing-action .bg-\[var\(--ink\)\] {
+  min-height: 48px;
+  padding: 0 1.45rem;
+  border-radius: 14px;
+  background-color: var(--muse-violet);
+  background-image: var(--muse);
+  color: #fff;
+  font-size: 1rem;
+  box-shadow: var(--lift);
+}
+
+.landing-action .bg-\[var\(--ink\)\]:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
 }
 
 .stage-lede {
