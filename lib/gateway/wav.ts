@@ -6,7 +6,7 @@ function writeString(view: DataView, offset: number, value: string) {
   for (let index = 0; index < value.length; index += 1) view.setUint8(offset + index, value.charCodeAt(index));
 }
 
-export function encodeWav(samples: Float32Array, sampleRate: number): Uint8Array {
+export function encodeWav(samples: Float32Array, sampleRate: number): Uint8Array<ArrayBuffer> {
   const ratio = sampleRate / TARGET_RATE;
   const length = Math.max(1, Math.floor(samples.length / Math.max(ratio, 0.0001)));
   const pcm = new Int16Array(length);

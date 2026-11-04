@@ -4,7 +4,19 @@ import { fileURLToPath } from "url";
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.dirname(fileURLToPath(import.meta.url)),
-  serverExternalPackages: ["@libsql/client", "libsql", "agntcy-dir", "@grpc/grpc-js", "@connectrpc/connect-node", "@buf/agntcy_dir.bufbuild_es", "@bufbuild/protobuf", "@aws-sdk/client-s3"],
+  serverExternalPackages: [
+    "@libsql/client",
+    "@libsql/core",
+    "@libsql/hrana-client",
+    "@libsql/isomorphic-ws",
+    "libsql",
+    "agntcy-dir",
+    "@grpc/grpc-js",
+    "@connectrpc/connect-node",
+    "@buf/agntcy_dir.bufbuild_es",
+    "@bufbuild/protobuf",
+    "@aws-sdk/client-s3",
+  ],
 };
 
 export default nextConfig;

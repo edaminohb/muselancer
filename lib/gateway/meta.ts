@@ -219,7 +219,9 @@ export async function transcribeWav(wav: Uint8Array, budget: GatewayBudget): Pro
     audioEncoding: "WAV",
     mode: "PUSH_TO_TALK",
   })], { type: "application/json" }));
-  form.append("audio", new Blob([wav], { type: "audio/wav" }), "message.wav");
+  const audio = new Uint8Array(wav.byteLength);
+  audio.set(wav);
+  form.append("audio", new Blob([audio], { type: "audio/wav" }), "message.wav");
   const response = await fetch("https://api.meta.ai/v1/asr/transcribe", {
     method: "POST",
     headers: { authorization: `Bearer ${key}`, accept: "application/json" },

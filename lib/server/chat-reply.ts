@@ -279,7 +279,7 @@ export async function agentReply(
       previousResponseId,
       budget,
     });
-    let step = await ask(priorResponse || undefined).catch((error: unknown) => {
+    const step = await ask(priorResponse || undefined).catch((error: unknown) => {
       if (!priorResponse) throw error;
       return ask(undefined);
     });
@@ -305,7 +305,7 @@ export async function agentReply(
   }
   const installedSkills = await activeSkills(agentId);
   const produced: string[] = [];
-  let asked: OwnerAsk | null = null;
+  const askedRef: { current: OwnerAsk | null } = { current: null };
   let stopForAsk = false;
   const extraTools: ExtraTool[] = [{
     name: "ask_owner",
@@ -323,7 +323,7 @@ export async function agentReply(
     run: async (args) => {
       const parsed = parseOwnerAsk(args);
       if (typeof parsed === "string") return parsed;
-      asked = parsed;
+      askedRef.current = parsed;
       stopForAsk = true;
       return "The owner sees the buttons and the field. Wait for their answer. Do not invent it.";
     },
@@ -521,6 +521,7 @@ export async function agentReply(
     if (savedPaths.length === 0) throw error;
     text = "";
   }
+  const asked = askedRef.current;
   if (!text.trim() && asked) text = asked.prompt;
   const fact = savedLine(savedPaths);
   const missing = produced.filter((item) => item.startsWith("[[image:") && !text.includes(item));

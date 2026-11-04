@@ -142,7 +142,7 @@ export async function handleTeach(
   const action = typeof command.action === "string" ? command.action : "";
   const profile = await loadProfile(agentId, owner);
   profile.owner = getAddress(owner);
-  let memory: string | null = null;
+  const memory: string | null = null;
   if (action === "models") throw new ProfileError("The model is chosen at registration.", 400);
   if (action === "character" || action === "identity" || action === "voice" || action === "conduct" || action === "goals") {
     const next = applyConfigAction(profile, action, command);

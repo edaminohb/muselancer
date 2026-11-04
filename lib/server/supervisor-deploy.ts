@@ -154,8 +154,8 @@ async function registrationHash(record: SupervisorRecord): Promise<Hash> {
   const from = getAddress(record.ownerAddress);
   const client = baseClient();
   const nonce = await client.getTransactionCount({ address: from });
-  if (nonce > 0n) {
-    const existing = await transactionAtNonce(from, 0n);
+  if (nonce > BigInt(0)) {
+    const existing = await transactionAtNonce(from, BigInt(0));
     if (existing) {
       const receipt = await client.getTransactionReceipt({ hash: existing });
       if (receipt.status === "success" && receipt.to && getAddress(receipt.to) === IDENTITY_REGISTRY) return existing;
@@ -174,7 +174,7 @@ async function send(walletId: string, address: string, data: Hex): Promise<Hash>
       throw new SupervisorDeployError(`The supervisor could not be registered. ${detail.slice(0, 180)}`);
     }
     const balance = await baseClient().getBalance({ address: getAddress(address) });
-    if (balance === 0n) {
+    if (balance === BigInt(0)) {
       throw new SupervisorDeployError("Turn on Privy gas sponsorship for Base Sepolia, then press Confirm and lock USDC again. No USDC has moved.");
     }
     try {
@@ -255,16 +255,16 @@ async function readPrivyTransaction(transactionId: string): Promise<{ hash?: str
 
 async function transactionAtNonce(address: Address, nonce: bigint): Promise<Hash | null> {
   const client = baseClient();
-  let low = 0n;
+  let low = BigInt(0);
   let high = await client.getBlockNumber();
   while (low < high) {
-    const mid = (low + high) / 2n;
+    const mid = (low + high) / BigInt(2);
     const count = await client.getTransactionCount({ address, blockNumber: mid });
-    if (count <= nonce) low = mid + 1n;
+    if (count <= nonce) low = mid + BigInt(1);
     else high = mid;
   }
   const block = await client.getBlock({ blockNumber: low, includeTransactions: true });
-  const found = block.transactions.find((tx) => typeof tx !== "string" && getAddress(tx.from) === address && tx.nonce === nonce);
+  const found = block.transactions.find((tx) => typeof tx !== "string" && getAddress(tx.from) === address && BigInt(tx.nonce) === nonce);
   return found && typeof found !== "string" ? found.hash : null;
 }
 

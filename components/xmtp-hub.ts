@@ -73,6 +73,12 @@ type HubMessage =
   | { type: "rows" | "published"; requestId: string; agentId: string; rows: ChatRow[]; error?: string }
   | { type: "update"; agentId: string; rows: ChatRow[] };
 
+type HubRequest = Extract<HubMessage, { type: "ask" | "publish" }> extends infer Message
+  ? Message extends unknown
+    ? Omit<Message, "requestId">
+    : never
+  : never;
+
 const LOCK = "muselancer-xmtp";
 const sessions = new Map<string, ChatSession>();
 const opening = new Map<string, Promise<ChatSession>>();
@@ -490,7 +496,7 @@ export async function publishTurn(agentId: string, intro: ChatIntro, ownerText: 
   return requestRows({ type: "publish", agentId, intro: introOf(agentId, intro), ownerText, agentText }, 60_000);
 }
 
-function requestRows(message: Omit<Extract<HubMessage, { type: "ask" | "publish" }>, "requestId">, timeoutMs: number): Promise<ChatRow[]> {
+function requestRows(message: HubRequest, timeoutMs: number): Promise<ChatRow[]> {
   const requestId = crypto.randomUUID();
   return new Promise((resolve, reject) => {
     const send = () => channel?.postMessage({ ...message, requestId });

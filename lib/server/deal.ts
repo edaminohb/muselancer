@@ -1150,7 +1150,7 @@ export async function handleDeal(owner: string, agentId: string, body: unknown):
   const command = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
   const action = typeof command.action === "string" ? command.action : "";
   const payer = getAddress(owner);
-  let deal = action === "brief" ? blank(agentId, payer) : requireOwnerDeal(await loadDeal(agentId), payer);
+  const deal = action === "brief" ? blank(agentId, payer) : requireOwnerDeal(await loadDeal(agentId), payer);
   if (action !== "brief" && action !== "answer" && deal.pendingAsk) throw new DealError("Answer the question first.", 400);
   let payment: Awaited<ReturnType<typeof quoteHire>> | undefined;
   if (action === "brief") {

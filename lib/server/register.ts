@@ -459,7 +459,7 @@ function chosenRegistrationModel(stored: string | undefined, submitted: string |
   return model;
 }
 
-function optionalHash(value: Hash | undefined): Hash | undefined {
+function optionalHash(value: Hash | "" | undefined): Hash | undefined {
   if (value === undefined || value === "") return undefined;
   if (!isHash(value)) throw new Error("Registry transaction hash is required.");
   return value;
@@ -474,8 +474,8 @@ export async function completeRegistration(input: {
   uriTxHash?: Hash;
   signatureTxHash?: Hash;
   walletTxHash?: Hash;
-  walletSignature?: Hex;
-  oasfSignature?: Hex;
+  walletSignature?: Hex | "";
+  oasfSignature?: Hex | "";
 }): Promise<AgentView> {
   if (input.password.length < 8) throw new Error("Choose a memory password of at least 8 characters.");
   if (!isHash(input.registerTxHash)) throw new Error("Registry transaction hash is required.");

@@ -229,3 +229,13 @@ Test USDC for the owner wallet comes from the [Circle faucet](https://faucet.cir
 - Owner chat is with that owner's own agent.
 - The public directory port is 8888. Do not publish the directory admin ports.
 - Do not print wallet addresses, Privy ids, or `PRIVY_AUTHORIZATION_KEY`.
+
+## Notices
+
+The libraries this app ships are MIT, Apache-2.0, BSD, or ISC, with the exceptions below.
+
+Sign-in uses Privy, which is Apache-2.0. Privy includes Reown AppKit and WalletConnect. Those pieces use the Reown community license. It allows this app royalty-free while the app stays under 500 monthly active users and 2,500,000 monthly requests. Portions © 2025 Reown, Inc. All Rights Reserved.
+
+`@ethereumjs/rlp`, `@ethereumjs/tx`, `@ethereumjs/util`, and `webextension-polyfill` are MPL-2.0 and are used unmodified. `rpc-websockets` is LGPL-3.0-only and is used unmodified, through the Solana client in that wallet stack. `caniuse-lite` is CC-BY-4.0 data used by the CSS build.
+
+The Modal client is Apache-2.0. LlamaFirewall's own code is MIT. Prompt Guard weights, if installed, stay under the Llama Community License. The Meta model API is a hosted service used under Meta's API terms.

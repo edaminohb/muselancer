@@ -188,6 +188,8 @@ async function runCall(
     proposeMemory?: (fact: string) => Promise<string>;
     stageOwnerFile?: (path: string, text: string) => Promise<string>;
     extraTools?: ExtraTool[];
+    mcpNamespaces?: Record<string, unknown>[];
+    callMcp?: (namespace: string, name: string, args: Record<string, unknown>) => Promise<string>;
   },
   granted: Set<string>,
   loaded: Set<string>,
