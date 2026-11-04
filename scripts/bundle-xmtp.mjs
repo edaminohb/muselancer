@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import esbuild from "esbuild";
 import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -7,20 +7,24 @@ const sdk = path.join(root, "node_modules", "@xmtp", "browser-sdk");
 const out = path.join(root, "public", "xmtp");
 const workerOut = path.join(out, "worker");
 
-function esbuild(args) {
-  const result = spawnSync("npx", ["--yes", "esbuild", ...args], { cwd: root, stdio: "inherit", shell: true });
-  if (result.status !== 0) process.exit(result.status ?? 1);
-}
-
 mkdirSync(workerOut, { recursive: true });
-esbuild(["node_modules/@xmtp/browser-sdk/entry.js", "--bundle", "--format=esm", "--outfile=public/xmtp/client.js", "--loader:.wasm=file"]);
-esbuild([
-  "node_modules/@xmtp/browser-sdk/typescript-wasm/worker-entry.gen.js",
-  "--bundle",
-  "--format=esm",
-  "--outfile=public/xmtp/worker/worker-entry.gen.js",
-  "--loader:.wasm=file",
-]);
+
+await esbuild.build({
+  absWorkingDir: root,
+  entryPoints: [path.join(sdk, "entry.js")],
+  bundle: true,
+  format: "esm",
+  outfile: path.join(out, "client.js"),
+  loader: { ".wasm": "file" },
+});
+await esbuild.build({
+  absWorkingDir: root,
+  entryPoints: [path.join(sdk, "typescript-wasm", "worker-entry.gen.js")],
+  bundle: true,
+  format: "esm",
+  outfile: path.join(workerOut, "worker-entry.gen.js"),
+  loader: { ".wasm": "file" },
+});
 
 copyFileSync(path.join(sdk, "typescript-pure", "xmtp_sdk.wasm"), path.join(out, "xmtp_sdk.wasm"));
 copyFileSync(path.join(sdk, "typescript-wasm", "xmtp_sdk.wasm"), path.join(workerOut, "xmtp_sdk.wasm"));
