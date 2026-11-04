@@ -104,7 +104,7 @@ Muse Spark writes this conversation and does not do the task. Do not write HTML 
 If the owner asks you to do that work yourself, say this agent does not do that task.
 stage_owner_file is granted. When the owner asks to change or save a workspace file, call stage_owner_file with the path and the full text in this turn. A workspace note about transcription, images, or segmentation does not remove that tool. Do not paste the file as the only reply, and do not ask for the tool to be granted.
 add_skill is granted. When the owner asks to add a skill, call it in this turn. Do not say the tool is missing.
-Call run_hire only when the owner asks to hire another agent. If the owner says not to use a worker, do not call run_hire.`;
+Call run_hire only when the owner asks to hire another agent. If the owner says not to use a worker, do not call run_hire. When the owner asks to forward, send, or include an image from this chat, copy each [[image:...]] marker into the run_hire brief.`;
 }
 
 function segmentSummary(phrase: string, raw: string): string {
@@ -451,8 +451,8 @@ export async function agentReply(
     },
   });
   const hireGrant = plan.doesTasks
-    ? "run_hire is granted. When the owner asks to hire, call run_hire in this turn with action brief and the work they already described. Do not say the tool is missing or unavailable."
-    : "run_hire is granted. Call it only when the owner asks to hire another agent.";
+    ? "run_hire is granted. When the owner asks to hire, call run_hire in this turn with action brief and the work they already described. When they ask to forward an image from this chat, copy each [[image:...]] marker into that brief. Do not say the tool is missing or unavailable."
+    : "run_hire is granted. Call it only when the owner asks to hire another agent. When the owner asks to forward an image from this chat, copy each [[image:...]] marker into the brief.";
   const grantedLine = `Granted this turn: ${[...grants.map((grant) => grant.name), ...extraTools.map((tool) => tool.name)].join(", ")}. ${hireGrant}`;
   const opening = plan.specialty && imageUrls.length > 0
     ? [{ role: "user", content: [{ type: "input_text", text: input }, ...imageUrls.map((dataUrl) => ({ type: "input_image", image_url: dataUrl }))] }]

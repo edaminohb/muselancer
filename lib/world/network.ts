@@ -97,6 +97,8 @@ export type TaskRecord = {
   lock?: HireLock;
   authorizeTx?: Hex;
   settlementTx?: Hex;
+  /** Images from the hiring agent's chat. The bytes stay in the chat record. */
+  inputs?: { path: string; imageId: string; sourceAgentId: string }[];
 };
 
 export type PublicExport = {

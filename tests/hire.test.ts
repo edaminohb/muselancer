@@ -32,6 +32,7 @@ import { cancelOnlyHire, decideHireContinuation, leavesCurrentDeal, ownerDeadlin
 import { authorizationPublicKey } from "../lib/server/supervisor-deploy";
 import { controlIdentity, ownerControls } from "../lib/deal/actions";
 import { briefJudgmentInstruction, clarifyGate, dealMessages, dealWorkText, deliveryFileKind, negotiationInstruction, relayDecision, scopeGate, scopeInstruction } from "../lib/deal/thread";
+import { criteriaWithImages, hireImageIds } from "../lib/deal/forward";
 import {
   agreedLockAmount,
   assertListedSuggestion,
@@ -1307,6 +1308,32 @@ test("the job sandbox returns the tree and refuses a path outside it", () => {
   const refused = JSON.parse(escaped.stdout || "{}") as { ok: boolean; error?: string };
   assert.equal(refused.ok, false);
   assert.match(refused.error ?? "", /outside the sandbox/);
+});
+
+test("a hire brief forwards a chat image and the sandbox keeps the file", () => {
+  const transcript = "Here is the picture [[image:aaa]] and a later one [[image:bbb]]";
+  assert.deepEqual(hireImageIds("Build the site with [[image:bbb]].", transcript), ["bbb"]);
+  assert.deepEqual(hireImageIds("Forward that image to the worker.", transcript), ["bbb"]);
+  assert.deepEqual(hireImageIds("Build a marketing site.", transcript), []);
+  const criteria = criteriaWithImages("Build the site. [[image:bbb]]", ["inputs/image-1.png"]);
+  assert.equal(criteria.includes("[[image:"), false);
+  assert.match(criteria, /inputs\/image-1\.png/);
+  const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  const python = process.env.PYTHON ?? "python";
+  const ran = spawnSync(python, ["runtime/job_sandbox.py"], {
+    input: JSON.stringify({
+      files: [{ path: "inputs/image-1.png", text: png }],
+      writes: [{ path: "index.html", text: "<img src=\"inputs/image-1.png\">" }],
+      command: [],
+    }),
+    encoding: "utf8",
+    cwd: process.cwd(),
+  });
+  assert.equal(ran.status, 0, ran.stderr);
+  const body = JSON.parse(ran.stdout || "{}") as { ok: boolean; files: { path: string; text: string }[] };
+  assert.equal(body.ok, true);
+  assert.equal(body.files.find((file) => file.path === "inputs/image-1.png")?.text, png);
+  assert.match(body.files.find((file) => file.path === "index.html")?.text ?? "", /inputs\/image-1\.png/);
 });
 
 test("a hire job seals the sandbox and confirm releases the files", async () => {

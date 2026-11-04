@@ -20,6 +20,7 @@ import { scanUntrusted } from "../gateway/firewall";
 import { describeDelivery } from "../gateway/meta";
 import { conversationModel } from "../gateway/models";
 import { workerTaskText } from "../agent/profile";
+import type { HireImageRef } from "../deal/forward";
 import { formatUsdc, usdcLockRefusal } from "../protocol/usdc";
 import { baseClient } from "../identity/chain";
 import { desk, saveDesk } from "./desk";
@@ -60,6 +61,7 @@ type PendingHire = {
   deadline?: string;
   hiringAgentId?: string;
   supervisorAgentId?: string;
+  files?: HireImageRef[];
 };
 
 function pendingKey(hireId: string): string {
@@ -162,6 +164,7 @@ export async function quoteHire(input: {
   agreedAmountUsdc?: string;
   deadline?: string;
   hiringAgentId?: string;
+  files?: HireImageRef[];
 }) {
   if (!sandboxConfigured()) throw new HireError("The hire sandbox is not deployed. No USDC has moved.", 409);
   const criteria = workerTaskText(input.criteria);
@@ -204,6 +207,7 @@ export async function quoteHire(input: {
     deadline: input.deadline,
     hiringAgentId: input.hiringAgentId ?? "",
     supervisorAgentId: supervisor.id,
+    files: input.files ?? [],
   };
   await writeDocument(pendingKey(hireId), JSON.stringify(pending));
   const message = receiveMessage(lock);
@@ -276,6 +280,7 @@ export async function confirmHire(input: { payer: string; hireId: string; signat
   task.supervisorAgentId = pending.supervisorAgentId;
   task.hiringAgentId = pending.hiringAgentId ?? "";
   if (pending.deadline) task.deadline = pending.deadline;
+  if (pending.files?.length) task.inputs = pending.files;
   const payment = net.authorizePayment({
     id: `pay-${pending.hireId}`,
     payer: pending.payer,

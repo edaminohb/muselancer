@@ -75,7 +75,11 @@ function canPreview(kind: "code" | "image" | "file", text: string): boolean {
 }
 
 function downloadDelivery(path: string, text: string) {
-  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const data = text.trim();
+  const image = /^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=\s]+)$/i.exec(data);
+  const blob = image
+    ? new Blob([Uint8Array.from(atob(image[2].replace(/\s/g, "")), (char) => char.charCodeAt(0))], { type: image[1] })
+    : new Blob([text], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;

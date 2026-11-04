@@ -13,6 +13,8 @@ import { publishHireStatus } from "./hire-status";
 import { publicAgent } from "./register";
 import { agentPreferredModel } from "./teach";
 import { activeSkills } from "./skills";
+import { readDocument } from "../db";
+import { chatImageKey, MAX_IMAGE_DATA_URL } from "../deal/forward";
 import type { Network, TaskRecord } from "../world/network";
 
 export const JOB_TURN_CAP = 6;
@@ -57,6 +59,7 @@ export function jobPrompt(input: { criteria: string; skills: JobFile[]; files: J
     `Deal:\n${input.criteria}`,
     skills ? `Reference skills, read only:\n${skills}` : "",
     listing ? `Sandbox files:\n${listing}` : "Sandbox files:\nnone",
+    input.files.some((file) => file.path.startsWith("inputs/")) ? "Files under inputs/ were attached by the hirer. Use those paths in the delivery." : "",
     input.lastOutput ? `Last command output:\n${input.lastOutput.slice(0, 4000)}` : "",
   ]
     .filter(Boolean)
@@ -80,6 +83,17 @@ export function acceptJobDecision(value: unknown): JobDecision | null {
     command.push(part);
   }
   return { files, command, done: record.done };
+}
+
+export async function loadHireInputFiles(inputs: { path: string; imageId: string; sourceAgentId: string }[] | undefined): Promise<JobFile[]> {
+  const files: JobFile[] = [];
+  for (const item of inputs ?? []) {
+    if (!item.path.startsWith("inputs/") || !/^[a-f0-9]+$/.test(item.imageId)) continue;
+    const raw = await readDocument(chatImageKey(item.sourceAgentId, item.imageId));
+    if (!raw?.startsWith("data:image/") || raw.length > MAX_IMAGE_DATA_URL) throw new Error("The attached image is missing.");
+    files.push({ path: item.path, text: raw });
+  }
+  return files;
 }
 
 export function parseBundle(plaintext: string): JobFile[] {
@@ -215,6 +229,7 @@ export async function runHireJob(
       previous,
       initial,
       criteria: task.criteria,
+      inputs: task.inputs ?? [],
       longHorizon: task.longHorizon === true,
       workerAgentId: task.workerAgentId,
       supervisorAgentId: task.supervisorAgentId ?? "",
@@ -227,11 +242,12 @@ export async function runHireJob(
     const criteriaScan = await scan(opened.criteria, "text");
     if (scannerBlocksSeal(criteriaScan)) throw new Error(criteriaScan.reason);
     const skills = await activeSkills(opened.workerAgentId);
+    const attached = opened.revision ? [] : await loadHireInputFiles(opened.inputs);
     const files = await runJobTurns({
       criteria: opened.criteria,
       longHorizon: opened.longHorizon,
       skills: referenceSkillFiles(skills),
-      initial: opened.initial,
+      initial: [...attached, ...opened.initial],
       revision: opened.revision,
       callModel: hooks?.callModel ?? ((instruction, flagged) => jobModel(instruction, flagged, opened.workerAgentId)),
       runSandbox: hooks?.runSandbox ?? (async (job) => runModalJob(job)),

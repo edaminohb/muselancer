@@ -3,6 +3,8 @@ import { getAddress } from "viem";
 import { readDocument, writeDocument } from "../db";
 import { decideHireContinuation, ownerBudgetLabel, ownerDeadlineMs, parseOfferAmount, statedDeadline, usableWorkQuestion, workerAcceptsOffer } from "../deal/owner-turn";
 import { briefJudgmentInstruction, clarifyGate, dealWorkText, negotiationInstruction, relayDecision, scopeGate, scopeInstruction } from "../deal/thread";
+import { chatImageKey, criteriaWithImages, hireImageIds, imageFilePath, MAX_IMAGE_DATA_URL, type HireImageRef } from "../deal/forward";
+import { readChatTranscript } from "./chat-thread";
 import {
   LOCK_WINDOW_MS,
   MAX_OFFERS,
@@ -88,6 +90,7 @@ export type Deal = {
   deadline: string | null;
   constraints: string;
   clarifications: string[];
+  files: HireImageRef[];
   pendingAsk: { from: "hirer" | "worker"; question: string } | null;
   scopeReady: boolean;
   ownerQuestions: number;
@@ -144,6 +147,7 @@ function blank(askingAgentId: string, payer: string): Deal {
     deadline: null,
     constraints: "",
     clarifications: [],
+    files: [],
     pendingAsk: null,
     scopeReady: false,
     ownerQuestions: 0,
@@ -251,9 +255,23 @@ function card(hit: Suggestion): string {
   return `${hit.name}\nSkills ${skills}\n${hit.description}\nPosted price ${price}`;
 }
 
+async function hireImages(agentId: string, brief: string): Promise<HireImageRef[]> {
+  const transcript = await readChatTranscript(agentId);
+  const ids = hireImageIds(brief, transcript.map((turn) => turn.text).join("\n"));
+  const files: HireImageRef[] = [];
+  for (const imageId of ids) {
+    const raw = await readDocument(chatImageKey(agentId, imageId));
+    if (!raw?.startsWith("data:image/")) throw new DealError("That image is not in this chat.", 400);
+    if (raw.length > MAX_IMAGE_DATA_URL) throw new DealError("That image is too large to send with the hire.", 400);
+    files.push({ path: imageFilePath(files.length, raw), imageId, sourceAgentId: agentId });
+  }
+  return files;
+}
+
 function taskText(deal: Deal): string {
   const when = deal.agreedDeadline ?? deal.deadline ?? "";
-  return dealWorkText({ brief: deal.brief, clarifications: deal.clarifications, constraints: deal.constraints, deadline: when });
+  const text = dealWorkText({ brief: deal.brief, clarifications: deal.clarifications, constraints: deal.constraints, deadline: when });
+  return criteriaWithImages(text, (deal.files ?? []).map((file) => file.path));
 }
 
 function textField(value: unknown): string {
@@ -869,6 +887,7 @@ async function confirmDeal(deal: Deal): Promise<Awaited<ReturnType<typeof quoteH
     agentId: deal.selectedAgentId,
     hiringAgentId: deal.askingAgentId,
     criteria: taskText(deal),
+    files: deal.files ?? [],
     longHorizon: deal.longHorizon === true,
     agreedAmountUsdc: amount,
     deadline: deal.agreedDeadline ?? undefined,
@@ -1158,6 +1177,7 @@ export async function handleDeal(owner: string, agentId: string, body: unknown):
     if (!brief) throw new DealError("Describe the work.", 400);
     if (brief.length > 8000) throw new DealError("Task text is too long.", 400);
     deal.brief = brief;
+    deal.files = await hireImages(agentId, brief);
     say(deal, "human", brief);
     await clarifyThenSearch(deal);
   } else if (action === "reject") {
