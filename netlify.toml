@@ -2,5 +2,9 @@
   command = "npm run build"
   publish = ".next"
 
+[build.environment]
+  # A public app id, a database path, and a bucket name. The secret keys stay scanned.
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_PRIVY_APP_ID,MUSELANCER_DB,FILEBASE_BUCKET"
+
 [[plugins]]
   package = "@netlify/plugin-nextjs"
