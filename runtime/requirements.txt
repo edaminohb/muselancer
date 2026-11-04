@@ -1,0 +1,2 @@
+llamafirewall
+# Run `llamafirewall configure` and `huggingface-cli login` once on the machine that scans. Prompt Guard weights use the Llama Community License.

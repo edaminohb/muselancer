@@ -1,27 +1,42 @@
 {
-  "name": "muselancer-tmp",
+  "name": "muselancer",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/mvp.test.ts tests/discovery.test.ts tests/hire.test.ts tests/agent.test.ts",
+    "postinstall": "node scripts/patch-privy-isactive.mjs && node scripts/bundle-xmtp.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1161.0",
+    "@bufbuild/protobuf": "2.16.0",
+    "@libsql/client": "^0.18.0",
+    "@privy-io/react-auth": "^3.51.0",
+    "@privy-io/server-auth": "^1.32.5",
+    "agntcy-dir": "1.8.0",
+    "drizzle-orm": "^0.45.4",
+    "next": "^15.5.28",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "next": "15.5.4"
+    "viem": "^2.56.5"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4",
     "eslint": "^9",
     "eslint-config-next": "15.5.4",
-    "@eslint/eslintrc": "^3"
+    "tailwindcss": "^4",
+    "tsx": "^4.23.15",
+    "typescript": "^5"
+  },
+  "overrides": {
+    "@peculiar/webcrypto": "1.6.0"
   }
 }

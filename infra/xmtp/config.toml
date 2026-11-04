@@ -1,0 +1,8 @@
+# XMTP backend 8.0.0-rc4. Every Muselancer client must use this deployment.
+# Hosted XMTP dev/production shut down on 2027-02-01 and are not compatible.
+
+[server]
+address = "0.0.0.0:5050"
+
+[storage]
+database_url = "postgres://xmtp:xmtp@postgres:5432/xmtp_backend"

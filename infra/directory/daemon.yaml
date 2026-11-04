@@ -1,0 +1,149 @@
+# Complete dirctl v1.8.0 daemon config. --config does not merge with built-in defaults.
+# gRPC listens on every container interface so the host can publish 127.0.0.1:8888.
+# The HTTP dashboard, OCI registry, and DHT are not published on the host.
+
+server:
+  listen_address: "0.0.0.0:8888"
+  store:
+    provider: "oci"
+    oci:
+      local_dir: "store"
+      registry_address: "localhost:5555"
+      repository_name: "dir"
+      auth_config:
+        insecure: true
+  routing:
+    listen_address: "/ip4/127.0.0.1/tcp/8999"
+    key_path: "node.key"
+    datastore_dir: "routing"
+    republish_interval: "36h"
+    gossipsub:
+      enabled: false
+    autosync:
+      enabled: false
+    relay_service: false
+    force_reachability_private: false
+    force_reachability_public: false
+  database:
+    type: "sqlite"
+    sqlite:
+      path: "dir.db"
+    postgres:
+      host: "localhost"
+      port: 5432
+      database: "dir"
+      ssl_mode: "disable"
+  publication:
+    scheduler_interval: 5m
+    worker_count: 1
+    worker_timeout: 30m
+  http_gateway:
+    enabled: false
+    listen_address: "127.0.0.1:8889"
+    public_url: "http://127.0.0.1:8889"
+  policy:
+    dir: policies
+    operations:
+      - provider: oasf
+        op: ["push", "autosync", "index"]
+        name: schema
+        schema_url: "https://schema.oasf.outshift.com"
+    evaluations: []
+    enforcement:
+      search: "off"
+      fetch: "off"
+      policies: []
+    refresh_interval: 30s
+
+reconciler:
+  regsync:
+    enabled: true
+    interval: 1m
+  metrics:
+    enabled: true
+    interval: 1m
+  indexer:
+    enabled: true
+    interval: 1m
+  signature:
+    enabled: true
+    interval: 1m
+    ttl: 168h
+    record_timeout: 30s
+  identity:
+    enabled: false
+    interval: 1m
+    record_timeout: 1m
+  scan:
+    enabled: false
+    interval: 1m
+    ttl: 168h
+    record_timeout: 2m
+    mcp_cli_path: "mcp-scanner"
+    skill_cli_path: "skill-scanner"
+    a2a_cli_path: "a2a-scanner"
+    disable_endpoint_scan: true
+    allow_private_endpoints: false
+    allow_insecure_transport: false
+    max_endpoints_per_record: 8
+  policy_evaluation:
+    enabled: false
+    interval: 1m
+    record_timeout: 30s
+    batch_size: 500
+  sync:
+    enabled: false
+    interval: 24h
+    criteria:
+      domains:
+        - network_security
+      limit: 100
+    dry_run: true
+  record_events:
+    enabled: true
+    window: 2s
+    reconnect_delay: 5s
+  prune:
+    enabled: false
+    interval: 30m
+    record_timeout: 30s
+    criteria:
+      min_severity: MEDIUM
+      older_than: 168h
+      limit: 100
+    dry_run: true
+  publish:
+    enabled: false
+    interval: 24h
+    criteria:
+      domains: []
+      limit: 100
+    dry_run: true
+  local_registry:
+    registry_address: "localhost:5555"
+    repository_name: "dir"
+    auth_config:
+      insecure: true
+  database:
+    type: "sqlite"
+    sqlite:
+      path: "dir.db"
+
+runtime:
+  enabled: false
+  adapter_types: ["docker", "process"]
+  adapter:
+    docker:
+      host: "unix:///var/run/docker.sock"
+    kubernetes:
+      kubeconfig: "~/.kube/config"
+    process:
+      dir: "~/.agntcy/dir-runtime/workloads.d"
+  oasf_schema_urls: ["https://schema.oasf.outshift.com"]
+  resolver:
+    a2a:
+      enabled: true
+    oasf:
+      enabled: true
+  store:
+    type: "sqlite"
