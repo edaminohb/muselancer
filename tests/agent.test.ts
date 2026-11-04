@@ -315,6 +315,34 @@ test("an owner message is not blocked by an earlier model call count", async () 
   assert.ok(budget.remainingCalls > 0);
 });
 
+test("a tool turn still answers after an empty step", async () => {
+  let closed = false;
+  const result = await executeOwnerLoop({
+    message: "Read the note.",
+    prefix: "",
+    skills: [],
+    grants: [{ name: "read_workspace", approval: "preapproved" }],
+    approvedTools: [],
+    workspace: { files: [{ path: "knowledge/note.txt", text: "Bring the poster." }] },
+    budget: { remainingCalls: 4, remainingTokens: 1000 },
+    runEntry: async () => {
+      throw new Error("script ran");
+    },
+    callModel: async (step) => {
+      if (step.tools.length === 0) {
+        closed = true;
+        return { responseId: "r3", text: "The note says to bring the poster.", calls: [] };
+      }
+      if (!step.previousResponseId) {
+        return { responseId: "r1", text: "I'll read it.", calls: [{ callId: "c1", name: "read_workspace", arguments: { path: "knowledge/note.txt" } }] };
+      }
+      return { responseId: "r2", text: "", calls: [] };
+    },
+  });
+  assert.equal(closed, true);
+  assert.equal(result.text, "The note says to bring the poster.");
+});
+
 test("a tool search keeps the hire tool granted", async () => {
   let listed = "";
   let returned = "";

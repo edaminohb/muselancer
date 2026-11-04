@@ -7,7 +7,7 @@ import { AUTH_CAPTURE_ESCROW, IDENTITY_CHAIN_ID, IDENTITY_REGISTRY } from "../li
 import { readDocument, writeDocument } from "../lib/db";
 import { assertCanSettle, mintRuntimeToken } from "../lib/gateway/token";
 import { scanGeneratedCode, scanUntrusted } from "../lib/gateway/firewall";
-import { responseText } from "../lib/gateway/meta";
+import { responseStop, responseText } from "../lib/gateway/meta";
 import { registeredAgentId } from "../lib/identity/chain";
 import { agentWalletSetTypes, identityAbi, identityDomain, registerWithRecordCall, walletDeadline } from "../lib/identity/registry";
 import { createMailboxKey, sealTo } from "../lib/messaging/seal";
@@ -604,4 +604,5 @@ test("a model reply is read from the message output", () => {
     ],
   });
   assert.equal(text, "Hello from the agent.");
+  assert.equal(responseStop({ status: "incomplete", incomplete_details: { reason: "max_output_tokens" } }), "The model stopped before it finished the reply. max_output_tokens");
 });

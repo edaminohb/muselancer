@@ -1,4 +1,4 @@
-import { canonicalModel, conversationModel, museModel } from "./models";
+import { canonicalModel, conversationModel, museModel, performsTasks } from "./models";
 
 export type GatewayBudget = {
   remainingCalls: number;
@@ -15,9 +15,12 @@ export type ModelRequest = {
 
 type ModelResponse = {
   id?: string;
+  status?: string;
   output_text?: string;
   output?: unknown[];
   usage?: { total_tokens?: number };
+  error?: { message?: string } | null;
+  incomplete_details?: { reason?: string } | null;
 };
 
 /** The responses API puts the reply on the message output, not always in output_text. */
@@ -165,10 +168,25 @@ export function callsFromOutput(output: unknown): { callId: string; name: string
   });
 }
 
+export function responseStop(json: { status?: string; error?: { message?: string } | null; incomplete_details?: { reason?: string } | null }): string {
+  if (json.status === "failed") return json.error?.message?.trim() || "The model failed before it replied.";
+  if (json.status === "incomplete") {
+    const reason = json.incomplete_details?.reason?.trim();
+    return reason ? `The model stopped before it finished the reply. ${reason}` : "The model stopped before it finished the reply.";
+  }
+  return "";
+}
+
 function stepFromResponse(json: ModelResponse, budget: GatewayBudget): OwnerModelStep {
   const tokens = json.usage?.total_tokens ?? 32;
   budget.remainingTokens -= tokens;
-  return { responseId: json.id ?? "", text: responseText(json), image: generatedImage(json.output), calls: callsFromOutput(json.output) };
+  const text = responseText(json);
+  const calls = callsFromOutput(json.output);
+  if (!text.trim() && calls.length === 0) {
+    const stopped = responseStop(json);
+    if (stopped) throw new Error(stopped);
+  }
+  return { responseId: json.id ?? "", text, image: generatedImage(json.output), calls };
 }
 
 /** Owner work only. Hire calls stay on completeModel and receive task text. */
@@ -194,6 +212,7 @@ export async function ownerModelStep(input: {
     body.tools = input.tools;
     body.tool_choice = "auto";
   }
+  if (performsTasks(model)) body.reasoning = { effort: "low" };
   if (input.previousResponseId) body.previous_response_id = input.previousResponseId;
   const response = await fetch("https://api.meta.ai/v1/responses", {
     method: "POST",
