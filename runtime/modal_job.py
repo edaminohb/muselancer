@@ -7,6 +7,10 @@ import sys
 
 
 def main() -> None:
+    # The Node parent writes UTF-8. Windows Python would otherwise read cp1252
+    # and mangle every non-ASCII character in the job (and in the result).
+    sys.stdin.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8")
     job = json.loads(sys.stdin.read() or "{}")
     import modal
 

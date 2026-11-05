@@ -35,6 +35,7 @@ type TaskView = {
   settlementTx?: string | null;
   supervisorNote?: string;
   supervisorSuggestion?: string;
+  revisionNote?: string;
   jobError?: string;
   jobLog?: { at: string; text: string }[];
   progress?: { working: boolean; headline: string; stages: { label: string; detail: string; state: "done" | "now" | "later" }[] };
@@ -154,6 +155,7 @@ export default function TaskPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [openPath, setOpenPath] = useState("");
+  const [revisionNote, setRevisionNote] = useState("");
   const seen = useRef("");
 
   async function load(quiet = false) {
@@ -274,7 +276,7 @@ export default function TaskPage() {
       const response = await fetch(`/api/tasks/${params.id}/verdict`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ verdict }),
+        body: JSON.stringify(verdict === "needs_revision" ? { verdict, note: revisionNote.trim() } : { verdict }),
       });
       const body = (await response.json()) as { error?: string; capture?: EscrowCall; void?: EscrowCall };
       if (!response.ok) {
@@ -311,6 +313,7 @@ export default function TaskPage() {
           return;
         }
       }
+      if (verdict === "needs_revision") setRevisionNote("");
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The wallet did not send the transaction.");
@@ -371,11 +374,30 @@ export default function TaskPage() {
         </div>
       ) : null}
       {hirer && (payload?.canAccept || payload?.canDecline || payload?.canSendBack) ? (
-        <div className="mt-4 flex flex-wrap gap-2">
-          {payload.canAccept ? <button className="bg-[var(--ink)] px-4 py-2 text-[var(--paper)] disabled:opacity-50" disabled={busy} onClick={() => void settle("pass")}>Confirm</button> : null}
-          {payload.canSendBack ? <button className="border border-[var(--ink)] px-4 py-2" disabled={busy} onClick={() => void settle("needs_revision")}>Send back</button> : null}
-          {payload.canDecline ? <button className="border border-[var(--ink)] px-4 py-2" disabled={busy} onClick={() => void settle("fail")}>Reject</button> : null}
+        <div className="mt-4 space-y-3">
+          {payload.canSendBack ? (
+            <label className="block">
+              <span className="text-sm font-medium">Note for the worker (optional)</span>
+              <span className="mt-1 block text-xs text-[var(--muted)]">Tell the worker what to change. They read this note, check it against the task, and revise the delivery.</span>
+              <textarea
+                className="mt-2 min-h-24 w-full border border-[var(--line)] bg-[var(--paper)] px-3 py-2 text-sm"
+                disabled={busy}
+                maxLength={2000}
+                onChange={(event) => setRevisionNote(event.target.value)}
+                placeholder="e.g. Keep the layout, but use the logo in the header, make the hero headline bigger, and add the services section."
+                value={revisionNote}
+              />
+            </label>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            {payload.canAccept ? <button className="bg-[var(--ink)] px-4 py-2 text-[var(--paper)] disabled:opacity-50" disabled={busy} onClick={() => void settle("pass")}>Confirm</button> : null}
+            {payload.canSendBack ? <button className="border border-[var(--ink)] px-4 py-2" disabled={busy} onClick={() => void settle("needs_revision")}>Send back</button> : null}
+            {payload.canDecline ? <button className="border border-[var(--ink)] px-4 py-2" disabled={busy} onClick={() => void settle("fail")}>Reject</button> : null}
+          </div>
         </div>
+      ) : null}
+      {task?.revisionNote && (task.status === "revision" || task.status === "running") ? (
+        <p className="mt-4 text-sm text-[var(--muted)]">Note sent to the worker: <span className="text-[var(--ink)]">{task.revisionNote}</span></p>
       ) : null}
       {error ? <p className="alert mt-4 text-sm">{error}</p> : null}
       {payload?.reviewed && task?.supervisorNote ? (

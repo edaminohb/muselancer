@@ -9,6 +9,8 @@ from firewall import scan_text
 
 
 def main() -> None:
+    sys.stdin.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8")
     job = json.loads(sys.stdin.read() or "{}")
     evidence = job.get("evidence", "")
     criteria = job.get("criteria", "")

@@ -4,7 +4,19 @@
 services:
   directory:
     image: ghcr.io/agntcy/dir-ctl:v1.8.0
+    restart: unless-stopped
     command: ["daemon", "start", "--config", "/etc/agntcy/daemon.yaml"]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/8888'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       DIRECTORY_DAEMON_SERVER_LISTEN_ADDRESS: "0.0.0.0:8888"
       DIRECTORY_DAEMON_SERVER_HTTP_GATEWAY_ENABLED: "false"

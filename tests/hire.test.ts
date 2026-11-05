@@ -75,7 +75,7 @@ import { sandboxFailure } from "../lib/server/modal-job";
 import { closeTaskBudget, loadTaskBudget, openTaskBudget, saveTaskBudget } from "../lib/server/budget";
 import { scannerBlocksSeal } from "../lib/gateway/llama";
 import { desk, saveDesk, withDesk } from "../lib/server/desk";
-import { ensureArtifactKey, jobPrompt, referenceSkillFiles, runHireJob, runJobTurns, JOB_TURN_CAP } from "../lib/server/hire-job";
+import { cleanModelText, ensureArtifactKey, jobPrompt, parseJobDecisionText, referenceSkillFiles, runHireJob, runJobTurns, JOB_TURN_CAP } from "../lib/server/hire-job";
 import { applyVerifiedVerdict, assertHireSignature, readReleasedDelivery, settlementCall, supervisorNote } from "../lib/server/hire";
 import { acceptSupervisorReport, acceptSupervisorSuggestion, supervisorGuidance, supervisorJobFiles, supervisorSuggestionNote } from "../lib/server/supervisor-report";
 import { isPlatformSupervisor } from "../lib/server/supervisor-id";
@@ -134,8 +134,22 @@ test("USDC amounts keep 6 decimals and the hire price stays inside the caps", ()
   assert.equal(shouldStartWorker({ status: "authorized", artifactCid: null, jobError: "The sandbox stopped before a delivery." }), false);
   assert.equal(shouldStartWorker({ status: "authorized", artifactCid: null, jobError: "The command is not a program and arguments." }), true);
   assert.equal(shouldStartWorker({ status: "authorized", artifactCid: null, jobError: "Lookup failed for Function 'run_job' from the 'muselancer' app." }), true);
+  assert.equal(shouldStartWorker({ status: "authorized", artifactCid: null, jobError: "A sandbox file is too large.", jobLog: [{ text: "The worker started. The delivery stays sealed until you confirm." }] }), true);
+  assert.equal(shouldStartWorker({ status: "authorized", artifactCid: null, jobError: "index.html is too large for the sandbox.", jobLog: [{ text: "The worker started. The delivery stays sealed until you confirm." }] }), true);
+  const startedFourTimes = Array.from({ length: 4 }, () => ({ text: "The worker started. The delivery stays sealed until you confirm." }));
+  assert.equal(shouldStartWorker({ status: "authorized", artifactCid: null, jobError: "index.html is too large for the sandbox.", jobLog: startedFourTimes }), false);
   assert.equal(sandboxFailure("modal.exception.NotFoundError: Lookup failed for Function 'run_job'").message, "The hire sandbox is not deployed. No USDC has moved.");
   assert.equal(shouldStartWorker({ status: "running", artifactCid: null, jobError: "" }), false);
+  assert.equal(shouldStartWorker({ status: "revision", artifactCid: "cid-1", jobError: "Unexpected token 'R', \"Rebuilding\"... is not valid JSON" }), true);
+  assert.equal(shouldStartWorker({ status: "revision", artifactCid: "cid-1", jobError: "The hire did not return a usable step." }), true);
+  assert.equal(shouldStartWorker({ status: "revision", artifactCid: "cid-1", jobError: "The supervisor must be a different agent from the hiring agent and the hired agent." }), false);
+  assert.deepEqual(parseJobDecisionText('{"files":[],"command":[],"done":true}'), { files: [], command: [], done: true });
+  assert.deepEqual(parseJobDecisionText('Rebuilding the page now. {"files":[{"path":"index.html","text":"<p>x</p>"}],"command":[],"done":true}'), {
+    files: [{ path: "index.html", text: "<p>x</p>" }],
+    command: [],
+    done: true,
+  });
+  assert.equal(parseJobDecisionText("Rebuilding the page now."), null);
   const line = jobLogLine({ turn: 1, paths: ["index.html"], command: [], output: "", done: true });
   assert.match(line, /Wrote index.html/);
   assert.equal(line.includes("<p>Hello</p>"), false);
@@ -1284,6 +1298,55 @@ test("a hire job stops after six sandbox turns", async () => {
   assert.equal(kept[0]?.path, "index.html");
 });
 
+test("a failed sandbox write is never sealed and lone surrogates are cleaned", async () => {
+  assert.equal(cleanModelText("a\udc8fb"), "a�b");
+  assert.equal(cleanModelText("ok 😀"), "ok 😀");
+  assert.equal(cleanModelText(`Museart ${String.fromCharCode(0xe2, 0x20ac, 0x201d)} design ${String.fromCharCode(0xf0, 0x178, 0x17d, 0xa8)}`), "Museart — design 🎨");
+  let calls = 0;
+  const files = await runJobTurns({
+    criteria: "Build the page.",
+    longHorizon: false,
+    skills: [],
+    initial: [],
+    revision: false,
+    callModel: async () => {
+      calls += 1;
+      return calls === 1
+        ? { files: [{ path: "index.html", text: "broken" }], command: [], done: true }
+        : { files: [{ path: "index.html", text: "<p>hero</p>" }], command: [], done: true };
+    },
+    runSandbox: async (job) =>
+      calls === 1
+        ? { ok: false, stdout: "", error: "surrogates not allowed", files: [{ path: "index.html", text: "" }] }
+        : { ok: true, stdout: "", files: job.writes },
+  });
+  assert.equal(calls, 2);
+  assert.equal(files.find((file) => file.path === "index.html")?.text, "<p>hero</p>");
+  await assert.rejects(
+    () =>
+      runJobTurns({
+        criteria: "Build the page.",
+        longHorizon: false,
+        skills: [],
+        initial: [],
+        revision: false,
+        callModel: async () => ({ files: [{ path: "index.html", text: "broken" }], command: [], done: true }),
+        runSandbox: async () => ({ ok: false, stdout: "", error: "surrogates not allowed", files: [{ path: "index.html", text: "" }] }),
+      }),
+    /surrogates not allowed/,
+  );
+  const python = process.env.PYTHON ?? "python";
+  const ran = spawnSync(python, ["runtime/job_sandbox.py"], {
+    input: JSON.stringify({ files: [], writes: [{ path: "index.html", text: "<p>hero \udc8f</p>" }], command: [] }),
+    encoding: "utf8",
+    cwd: process.cwd(),
+  });
+  assert.equal(ran.status, 0, ran.stderr);
+  const body = JSON.parse(ran.stdout || "{}") as { ok: boolean; error?: string; files: { path: string; text: string }[] };
+  assert.equal(body.ok, true, body.error);
+  assert.match(body.files.find((file) => file.path === "index.html")?.text ?? "", /<p>hero/);
+});
+
 test("the job sandbox returns the tree and refuses a path outside it", () => {
   const python = process.env.PYTHON ?? "python";
   const ran = spawnSync(python, ["runtime/job_sandbox.py"], {
@@ -1334,6 +1397,59 @@ test("a hire brief forwards a chat image and the sandbox keeps the file", () => 
   assert.equal(body.ok, true);
   assert.equal(body.files.find((file) => file.path === "inputs/image-1.png")?.text, png);
   assert.match(body.files.find((file) => file.path === "index.html")?.text ?? "", /inputs\/image-1\.png/);
+});
+
+test("the job sandbox keeps a website that inlines the hirer's image and an image above a million bytes", () => {
+  const python = process.env.PYTHON ?? "python";
+  const pngHeader = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const logo = `data:image/png;base64,${Buffer.concat([pngHeader, Buffer.alloc(82_000, 1)]).toString("base64")}`;
+  const build = [
+    "import base64",
+    "data = base64.b64encode(open('inputs/image-1.png', 'rb').read()).decode()",
+    "open('index.html', 'w', encoding='utf-8').write('<img src=\"data:image/png;base64,' + data + '\">')",
+  ].join("\n");
+  const ran = spawnSync(python, ["runtime/job_sandbox.py"], {
+    input: JSON.stringify({
+      files: [{ path: "inputs/image-1.png", text: logo }],
+      writes: [{ path: "build.py", text: build }],
+      command: ["python", "build.py"],
+    }),
+    encoding: "utf8",
+    cwd: process.cwd(),
+    maxBuffer: 16_000_000,
+  });
+  assert.equal(ran.status, 0, ran.stderr);
+  const body = JSON.parse(ran.stdout || "{}") as { ok: boolean; error?: string; files: { path: string; text: string }[] };
+  assert.equal(body.ok, true, body.error);
+  const site = body.files.find((file) => file.path === "index.html");
+  assert.ok((site?.text.length ?? 0) > 64_000, "the single-file site should exceed the old collection cap");
+
+  const bigImage = `data:image/png;base64,${Buffer.concat([pngHeader, Buffer.alloc(1_050_000, 2)]).toString("base64")}`;
+  const big = spawnSync(python, ["runtime/job_sandbox.py"], {
+    input: JSON.stringify({ files: [{ path: "inputs/image-1.png", text: bigImage }], writes: [], command: [] }),
+    encoding: "utf8",
+    cwd: process.cwd(),
+    maxBuffer: 16_000_000,
+  });
+  assert.equal(big.status, 0, big.stderr);
+  const bigBody = JSON.parse(big.stdout || "{}") as { ok: boolean; error?: string; files: { path: string; text: string }[] };
+  assert.equal(bigBody.ok, true, bigBody.error);
+  assert.equal(bigBody.files.find((file) => file.path === "inputs/image-1.png")?.text, bigImage);
+
+  const huge = spawnSync(python, ["runtime/job_sandbox.py"], {
+    input: JSON.stringify({
+      files: [],
+      writes: [{ path: "make.py", text: "open('big.txt', 'w', encoding='utf-8').write('x' * 1_100_000)" }],
+      command: ["python", "make.py"],
+    }),
+    encoding: "utf8",
+    cwd: process.cwd(),
+    maxBuffer: 16_000_000,
+  });
+  assert.equal(huge.status, 0, huge.stderr);
+  const hugeBody = JSON.parse(huge.stdout || "{}") as { ok: boolean; error?: string };
+  assert.equal(hugeBody.ok, false);
+  assert.match(hugeBody.error ?? "", /big\.txt is too large for the sandbox/);
 });
 
 test("a hire job seals the sandbox and confirm releases the files", async () => {

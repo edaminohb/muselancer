@@ -113,20 +113,14 @@ export async function executeOwnerLoop(input: {
   let modelInput: unknown = input.opening ?? input.message;
   let text = "";
   let usedTool = false;
-  let needsWords = false;
-  let unsentOutputs = false;
   for (let round = 0; round < TURN_CAP; round += 1) {
     if (input.budget.remainingCalls <= 0 || input.budget.remainingTokens <= 0) throw new Error("Agent budget is exhausted.");
     input.onActivity?.(usedTool ? "Replying" : "Thinking");
     const step = await input.callModel({ previousResponseId, instructions, input: modelInput, tools });
     input.budget.remainingCalls -= 1;
     previousResponseId = step.responseId;
-    if (step.text.trim()) text = step.text;
-    if (step.calls.length === 0) {
-      needsWords = usedTool && !step.text.trim();
-      unsentOutputs = false;
-      break;
-    }
+    text = step.text;
+    if (step.calls.length === 0) break;
     const outputs: { type: string; call_id: string; output?: string; tools?: Record<string, unknown>[] }[] = [];
     for (const call of step.calls) {
       input.onActivity?.(activityLabel(call.name, call.namespace));
@@ -150,28 +144,8 @@ export async function executeOwnerLoop(input: {
         outputs.push({ type: "function_call_output", call_id: call.callId, output });
       }
     }
-    if (input.stopWhen?.()) {
-      needsWords = false;
-      break;
-    }
+    if (input.stopWhen?.()) break;
     modelInput = outputs;
-    needsWords = true;
-    unsentOutputs = true;
-  }
-  if (needsWords && input.budget.remainingCalls > 0 && input.budget.remainingTokens > 0) {
-    input.onActivity?.("Replying");
-    const step = await input.callModel({
-      previousResponseId,
-      instructions,
-      input: unsentOutputs ? modelInput : "Answer the owner in words, using what the tools returned.",
-      tools: [],
-    });
-    input.budget.remainingCalls -= 1;
-    if (step.text.trim()) text = step.text;
-  }
-  if (!text.trim()) {
-    const last = results[results.length - 1]?.output.trim() ?? "";
-    if (last) text = clip(last);
   }
   return { text, loadedSkills: [...loaded], results, workspace };
 }

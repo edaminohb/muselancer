@@ -48,18 +48,34 @@ export function referenceSkillFiles(skills: { files: { path: string; text: strin
 }
 
 /** The hired job sees the deal, the skill text, and the sandbox. Owner notes are not an argument. */
-export function jobPrompt(input: { criteria: string; skills: JobFile[]; files: JobFile[]; lastOutput: string; revision: boolean }): string {
+export function jobPrompt(input: { criteria: string; skills: JobFile[]; files: JobFile[]; lastOutput: string; revision: boolean; revisionNote?: string }): string {
   const skills = input.skills.map((file) => `${file.path}\n${file.text.slice(0, 2000)}`).join("\n\n");
   const listing = input.files.map((file) => file.path).join("\n");
+  let delivery = "";
+  if (input.revision) {
+    const parts: string[] = [];
+    let used = 0;
+    for (const file of input.files) {
+      if (file.text.startsWith("data:image/") || used >= 12_000) continue;
+      const slice = file.text.slice(0, 3_000);
+      parts.push(`--- ${file.path}\n${slice}`);
+      used += slice.length;
+    }
+    if (parts.length) delivery = `The delivery you already made is in the sandbox. Its current files:\n${parts.join("\n\n")}`;
+  }
   return [
     WORKER_PLATFORM,
     "Write the delivery files here. Run one command when the work needs to be tested.",
     "Owner notes stay out of this job.",
-    input.revision ? "The hirer sent this delivery back. Revise the work." : "",
+    input.revision
+      ? "The hirer sent this delivery back. Do not deliver the same work again. First, check every requirement in the Deal, and every point in the hirer's note, against the current delivery below. Work out what is missing or wrong, then change those files. Do not mark done on a turn where you changed nothing. After you change files, run one command that checks the result when the work can be checked, read its output, fix anything it shows, and only then mark done."
+      : "",
+    input.revision && input.revisionNote?.trim() ? `The hirer told you what to change. Follow this note:\n${input.revisionNote.trim()}` : "",
     `Deal:\n${input.criteria}`,
+    delivery,
     skills ? `Reference skills, read only:\n${skills}` : "",
     listing ? `Sandbox files:\n${listing}` : "Sandbox files:\nnone",
-    input.files.some((file) => file.path.startsWith("inputs/")) ? "Files under inputs/ were attached by the hirer. Use those paths in the delivery." : "",
+    input.files.some((file) => file.path.startsWith("inputs/")) ? "Files under inputs/ were attached by the hirer. Reference them by their relative path in the delivery. Do not embed them as base64." : "",
     input.lastOutput ? `Last command output:\n${input.lastOutput.slice(0, 4000)}` : "",
   ]
     .filter(Boolean)
@@ -123,25 +139,39 @@ export async function runJobTurns(input: {
   skills: JobFile[];
   initial: JobFile[];
   revision: boolean;
+  revisionNote?: string;
   callModel: (instruction: string, longHorizon: boolean) => Promise<JobDecision>;
   runSandbox: (job: SandboxJob) => Promise<SandboxResult>;
   onStep?: (step: { turn: number; paths: string[]; command: string[]; output: string; done: boolean; skipped?: string }) => Promise<void> | void;
 }): Promise<JobFile[]> {
   let files = input.initial;
   let lastOutput = "";
+  let revised = false;
+  let sandboxFailure = "";
   for (let turn = 0; turn < JOB_TURN_CAP; turn += 1) {
     const decision = await input.callModel(
-      jobPrompt({ criteria: input.criteria, skills: input.skills, files, lastOutput, revision: input.revision }),
+      jobPrompt({ criteria: input.criteria, skills: input.skills, files, lastOutput, revision: input.revision, revisionNote: input.revisionNote }),
       input.longHorizon,
     );
     const writes = usableWrites(decision.files);
     const checked = usableCommand(decision.command);
     const command = checked.command;
+    const changesWork = writes.some((file) => files.find((item) => item.path === file.path)?.text !== file.text) || command.length > 0;
     if (writes.length > 0 || command.length > 0) {
       const result = await input.runSandbox({ files, writes, command });
-      if (!result.ok && result.files.length === 0) throw new Error(result.error || "The sandbox did not run.");
-      if (result.files.length > 0) files = result.files;
-      lastOutput = [result.stdout, result.error].filter(Boolean).join("\n").slice(0, 4000);
+      if (!result.ok) {
+        // Never seal a partial tree from a failed sandbox run. Keep the last
+        // good files, tell the model what failed, and let it try again.
+        sandboxFailure = result.error || "The sandbox did not run.";
+        lastOutput = [result.stdout, result.error].filter(Boolean).join("\n").slice(0, 4000);
+      } else {
+        sandboxFailure = "";
+        if (input.revision && changesWork) revised = true;
+        if (result.files.length > 0) {
+          files = result.files.map((file) => (file.text.startsWith("data:image/") ? file : { path: file.path, text: cleanModelText(file.text) }));
+        }
+        lastOutput = [result.stdout, result.error].filter(Boolean).join("\n").slice(0, 4000);
+      }
     }
     await input.onStep?.({
       turn: turn + 1,
@@ -151,9 +181,20 @@ export async function runJobTurns(input: {
       done: decision.done,
       skipped: checked.skipped,
     });
-    if (decision.done) break;
+    if (decision.done) {
+      if (sandboxFailure) {
+        lastOutput = `The sandbox failed on your last write, so nothing was saved: ${sandboxFailure} Fix the files and write them again. Do not mark done until a write succeeds.`;
+      } else if (!input.revision || revised) {
+        break;
+      } else {
+        // Sent-back work cannot be finished by handing the same files back.
+        lastOutput = "You marked done without changing any file. This delivery was sent back. Change the files that fail the Deal or the hirer's note, run a command that checks the result, and only then mark done.";
+      }
+    }
   }
+  if (sandboxFailure) throw new Error(sandboxFailure);
   if (files.length === 0) throw new Error("The hire did not produce a delivery.");
+  if (input.revision && !revised) throw new Error("The worker returned the delivery unchanged.");
   return files;
 }
 
@@ -229,6 +270,7 @@ export async function runHireJob(
       previous,
       initial,
       criteria: task.criteria,
+      revisionNote: revision ? (task.revisionNote ?? "") : "",
       inputs: task.inputs ?? [],
       longHorizon: task.longHorizon === true,
       workerAgentId: task.workerAgentId,
@@ -249,6 +291,7 @@ export async function runHireJob(
       skills: referenceSkillFiles(skills),
       initial: [...attached, ...opened.initial],
       revision: opened.revision,
+      revisionNote: opened.revisionNote,
       callModel: hooks?.callModel ?? ((instruction, flagged) => jobModel(instruction, flagged, opened.workerAgentId)),
       runSandbox: hooks?.runSandbox ?? (async (job) => runModalJob(job)),
       onStep: async (step) => {
@@ -295,13 +338,26 @@ export async function runHireJob(
   }
 }
 
-async function jobModel(instruction: string, longHorizon: boolean, workerAgentId: string): Promise<JobDecision> {
-  const model = await agentPreferredModel(workerAgentId, longHorizon);
-  const refusal = taskRefusal(model);
-  if (refusal) throw new Error(refusal);
-  assertModel(model, longHorizon);
-  const key = process.env.MODEL_API_KEY?.trim();
-  if (!key) throw new Error("The model key is missing. USDC stays locked.");
+/** Models sometimes answer with prose ("Rebuilding the page...") despite the JSON schema. Pull the JSON object out when one is present. */
+export function parseJobDecisionText(text: string): JobDecision | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const candidates = [trimmed];
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start >= 0 && end > start) candidates.push(trimmed.slice(start, end + 1));
+  for (const candidate of candidates) {
+    try {
+      const decision = acceptJobDecision(JSON.parse(candidate));
+      if (decision) return decision;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+async function requestJobDecision(instruction: string, model: string, key: string): Promise<JobDecision | null> {
   const response = await fetch("https://api.meta.ai/v1/responses", {
     method: "POST",
     headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
@@ -340,16 +396,63 @@ async function jobModel(instruction: string, longHorizon: boolean, workerAgentId
     throw new Error(`Meta gateway failed: ${response.status} ${detail.slice(0, 200)}`);
   }
   const json = (await response.json()) as ModelResponse;
-  const decision = acceptJobDecision(JSON.parse(responseText(json) || "{}"));
-  if (!decision) throw new Error("The hire did not return a usable step.");
-  return decision;
+  return parseJobDecisionText(responseText(json));
+}
+
+async function jobModel(instruction: string, longHorizon: boolean, workerAgentId: string): Promise<JobDecision> {
+  const model = await agentPreferredModel(workerAgentId, longHorizon);
+  const refusal = taskRefusal(model);
+  if (refusal) throw new Error(refusal);
+  assertModel(model, longHorizon);
+  const key = process.env.MODEL_API_KEY?.trim();
+  if (!key) throw new Error("The model key is missing. USDC stays locked.");
+  const decision = await requestJobDecision(instruction, model, key);
+  if (decision) return decision;
+  // The model answered in prose instead of the required JSON. Ask once more, plainly.
+  const retry = await requestJobDecision(
+    `${instruction}\n\nYour last reply was not the required JSON. Return only the job_turn JSON object, with no prose before or after it.`,
+    model,
+    key,
+  );
+  if (!retry) throw new Error("The hire did not return a usable step.");
+  return retry;
+}
+
+const CP1252_EXTRA: Record<string, number> = {
+  "€": 0x80, "‚": 0x82, "ƒ": 0x83, "„": 0x84, "…": 0x85, "†": 0x86, "‡": 0x87, "ˆ": 0x88, "‰": 0x89,
+  "Š": 0x8a, "‹": 0x8b, "Œ": 0x8c, "Ž": 0x8e, "‘": 0x91, "’": 0x92, "“": 0x93, "”": 0x94, "•": 0x95,
+  "–": 0x96, "—": 0x97, "˜": 0x98, "™": 0x99, "š": 0x9a, "›": 0x9b, "œ": 0x9c, "ž": 0x9e, "Ÿ": 0x9f,
+};
+
+/** Text that was UTF-8 bytes read as cp1252 ("â€"" for —, "ðŸŽ¨" for 🎨) can be restored exactly. */
+export function repairMojibake(text: string): string {
+  if (!/[ÃâðÂ]/.test(text)) return text;
+  const bytes: number[] = [];
+  for (const char of text) {
+    const code = char.codePointAt(0) ?? 0;
+    if (code < 0x80 || (code >= 0xa0 && code <= 0xff)) bytes.push(code);
+    else if (CP1252_EXTRA[char] !== undefined) bytes.push(CP1252_EXTRA[char]);
+    else return text;
+  }
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(bytes));
+  } catch {
+    return text;
+  }
+}
+
+/** Model text can carry lone surrogates, which UTF-8 cannot encode. Replace them so a write never lands as a zero-byte file. */
+export function cleanModelText(text: string): string {
+  const cleaned = text.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "�");
+  return repairMojibake(cleaned);
 }
 
 function usableWrites(files: JobFile[]): JobFile[] {
   if (files.length > 200) throw new Error("This sandbox is too large.");
   return files.map((file) => {
-    if (!jobPath(file.path) || file.text.length > 64_000) throw new Error("That path is outside the sandbox.");
-    return file;
+    if (!jobPath(file.path)) throw new Error("That path is outside the sandbox.");
+    if (file.text.length > 1_000_000) throw new Error(`${file.path} is too large for the sandbox.`);
+    return { path: file.path, text: file.text.startsWith("data:image/") ? file.text : cleanModelText(file.text) };
   });
 }
 

@@ -4,6 +4,8 @@ import { getIdentityToken, useCreateWallet, usePrivy } from "@privy-io/react-aut
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+const WALLET_WAIT_MS = 30_000;
+
 export function PrivyLogin() {
   const router = useRouter();
   const { login, authenticated, user, ready, getAccessToken } = usePrivy();
@@ -11,18 +13,18 @@ export function PrivyLogin() {
   const [error, setError] = useState("");
   const started = useRef(false);
 
+  // Privy reports authenticated before the embedded wallet it creates on
+  // login has been linked to the account. Until that wallet appears, the
+  // account is still being created: wait, do not fail.
+  const wallets = (user?.linkedAccounts ?? []).flatMap((account) =>
+    account.type === "wallet" && account.chainType === "ethereum" && account.walletClientType === "privy"
+      ? [account.address]
+      : [],
+  );
+  const ownerAddress = wallets[0] ?? "";
+
   async function enter() {
     setError("");
-    const wallets = (user?.linkedAccounts ?? []).flatMap((account) =>
-      account.type === "wallet" && account.chainType === "ethereum" && account.walletClientType === "privy"
-        ? [account.address]
-        : [],
-    );
-    const ownerAddress = wallets[0];
-    if (!ownerAddress) {
-      setError("Privy has not created the owner wallet yet.");
-      return;
-    }
     let agentAddress = wallets[1] ?? "";
     if (!agentAddress) {
       const created = await createWallet({ createAdditional: true });
@@ -52,13 +54,25 @@ export function PrivyLogin() {
     router.push("/dashboard");
   }
 
+  // Only complain if Privy still has not linked a wallet long after sign-in.
   useEffect(() => {
-    if (!ready || !authenticated || started.current) return;
+    if (!ready || !authenticated || ownerAddress) return;
+    const timer = setTimeout(() => {
+      setError("Privy is taking longer than usual to create the owner wallet. Keep this tab open, or refresh and sign in again.");
+    }, WALLET_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [ready, authenticated, ownerAddress]);
+
+  useEffect(() => {
+    if (!ready || !authenticated || !ownerAddress || started.current) return;
     started.current = true;
-    void enter();
-    // Open the desk once Privy already has this account.
+    void enter().catch(() => {
+      started.current = false;
+      setError("Could not finish sign-in. Try again.");
+    });
+    // Open the desk once Privy has linked this account's wallet.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, authenticated]);
+  }, [ready, authenticated, ownerAddress]);
 
   if (!ready || !authenticated) {
     return (
@@ -69,7 +83,7 @@ export function PrivyLogin() {
   }
   return (
     <div className="space-y-3">
-      <p className="text-sm text-[var(--muted)]">Opening your desk…</p>
+      <p className="text-sm text-[var(--muted)]">{ownerAddress ? "Opening your desk…" : "Creating your wallet…"}</p>
       {error ? <p className="text-sm text-red-700">{error}</p> : null}
     </div>
   );

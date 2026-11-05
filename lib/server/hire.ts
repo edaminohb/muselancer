@@ -412,11 +412,18 @@ export async function readReleasedDelivery(payer: string, taskId: string): Promi
   }
 }
 
-export async function settlementCall(input: { payer: string; taskId: string; verdict: "pass" | "fail" | "needs_revision" }) {
+export async function settlementCall(input: { payer: string; taskId: string; verdict: "pass" | "fail" | "needs_revision"; note?: string }) {
   const { net, task } = await settlementTask(input.taskId, input.payer, input.verdict);
   if (!task.lock) throw new HireError("This task has no escrow lock.", 404);
   if (input.verdict === "needs_revision") {
     const closed = settleLocal(net, task.id, "needs_revision");
+    const note = (input.note ?? "").trim().slice(0, 2_000);
+    if (note) {
+      closed.revisionNote = note;
+      closed.jobLog ??= [];
+      closed.jobLog.push({ at: new Date().toISOString(), text: `Hirer note for the worker: ${note.slice(0, 300)}` });
+      if (closed.jobLog.length > 24) closed.jobLog.splice(0, closed.jobLog.length - 24);
+    }
     await saveDesk(net);
     const payment = closed.paymentId ? net.getPayment(closed.paymentId) : undefined;
     return { taskId: closed.id, status: closed.status, verdict: closed.verdict, paymentStatus: payment?.status ?? null };
@@ -524,6 +531,7 @@ export async function taskPayload(taskId: string, viewer: string) {
       supervisorAgentId: task.supervisorAgentId ?? "",
       supervisorNote: supervisorNote(task),
       supervisorSuggestion: supervisorSuggestionNote(task.supervisorSuggestion),
+      revisionNote: task.revisionNote ?? "",
       jobError: task.jobError ?? "",
       jobLog: (task.jobLog ?? []).map((entry) => ({ at: entry.at, text: entry.text })),
       deliveryReleased: task.deliveryReleased === true,

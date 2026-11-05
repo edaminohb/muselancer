@@ -285,6 +285,7 @@ test("an unreachable directory names the missing connection", () => {
   assert.match(error.message, /Directory request failed: the server cannot reach the Directory node/);
   assert.match(directoryRequestError(new Error("ECONNREFUSED"), "203.0.113.10:8888").message, /did not accept a connection/);
   assert.match(directoryRequestError(new Error("record rejected"), "example.ts.net:8888").message, /record rejected/);
+  assert.match(directoryRequestError(new Error("Directory request timed out after 15s.")).message, /did not answer in time/);
   assert.equal(
     directoryRequestError(new Error("Directory request failed: the server cannot reach the Directory node.")).message,
     "Directory request failed: the server cannot reach the Directory node.",

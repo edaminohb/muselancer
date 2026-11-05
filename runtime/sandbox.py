@@ -22,6 +22,8 @@ def safe_join(root: Path, relative: str) -> Path:
 
 
 def main() -> None:
+    sys.stdin.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8")
     job = json.loads(sys.stdin.read() or "{}")
     root = Path(tempfile.mkdtemp(prefix="muselancer-"))
     try:

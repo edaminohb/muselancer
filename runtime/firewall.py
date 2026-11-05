@@ -86,6 +86,8 @@ def scan_text(text: str, code: bool = False) -> dict:
 
 
 def main() -> None:
+    sys.stdin.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8")
     job = json.loads(sys.stdin.read() or "{}")
     json.dump(scan_text(job.get("text", ""), code=job.get("kind") == "code"), sys.stdout)
 

@@ -4,14 +4,29 @@ export type HireStage = { label: string; detail: string; state: HireStageState }
 
 export type HireProgress = { working: boolean; headline: string; stages: HireStage[] };
 
-export function shouldStartWorker(task: { status?: string; artifactCid?: string | null; jobError?: string | null }): boolean {
+/** Sandbox size failures are recoverable: the file may fit after the sandbox limits change. Cap automatic resumes so a file that is still too large does not loop forever. */
+export const MAX_SANDBOX_RESUMES = 3;
+
+export function isSandboxSizeError(error: string): boolean {
+  return error === "A sandbox file is too large." || error === "This sandbox is too large." || error.includes("is too large for the sandbox");
+}
+
+export function shouldStartWorker(task: { status?: string; artifactCid?: string | null; jobError?: string | null; jobLog?: { text: string }[] }): boolean {
   const error = String(task.jobError ?? "").trim();
+  const sandboxSize = isSandboxSizeError(error);
+  const starts = (task.jobLog ?? []).filter((entry) => entry.text.startsWith("The worker started.") || entry.text.startsWith("The hirer sent the delivery back.")).length;
   const recoverable =
     error === "The command is not a program and arguments." ||
     error.includes("Lookup failed for Function") ||
     error === "The hire sandbox is not deployed. No USDC has moved." ||
-    error === "LlamaFirewall unavailable";
-  return task.status === "authorized" && !task.artifactCid && (!error || recoverable);
+    error === "LlamaFirewall unavailable" ||
+    error === "The hire did not return a usable step." ||
+    error.includes("is not valid JSON") ||
+    (error === "The worker returned the delivery unchanged." && starts <= MAX_SANDBOX_RESUMES) ||
+    (sandboxSize && starts <= MAX_SANDBOX_RESUMES);
+  const freshHire = task.status === "authorized" && !task.artifactCid;
+  const sentBack = task.status === "revision" && Boolean(task.artifactCid);
+  return (freshHire || sentBack) && (!error || recoverable);
 }
 
 /** How long the open task page waits before the next read. A closed hire stops. */

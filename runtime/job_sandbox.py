@@ -11,9 +11,10 @@ import tempfile
 from pathlib import Path
 
 MAX_FILES = 200
-MAX_CHARS = 64_000
+MAX_CHARS = 1_000_000
+MAX_TOTAL_CHARS = 8_000_000
 MAX_IMAGE_CHARS = 1_500_000
-MAX_IMAGE_BYTES = 1_000_000
+MAX_IMAGE_BYTES = 1_125_000
 MAX_ARGS = 8
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 IMAGE_MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif"}
@@ -40,20 +41,24 @@ def write_file(root: Path, item: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if text.startswith("data:image/") and ";base64," in text[:80]:
         if len(text) > MAX_IMAGE_CHARS:
-            raise ValueError("A sandbox file is too large.")
+            raise ValueError(f"{relative} is too large for the sandbox.")
         payload = text.split(",", 1)[1]
         raw = base64.b64decode(payload, validate=False)
         if len(raw) > MAX_IMAGE_BYTES:
-            raise ValueError("A sandbox file is too large.")
+            raise ValueError(f"{relative} is too large for the sandbox.")
         path.write_bytes(raw)
         return
     if len(text) > MAX_CHARS:
-        raise ValueError("A sandbox file is too large.")
-    path.write_text(text, encoding="utf-8")
+        raise ValueError(f"{relative} is too large for the sandbox.")
+    # Model output can carry lone surrogates, which UTF-8 cannot encode. Replace
+    # them instead of truncating the file to zero bytes and failing the write.
+    clean = text.encode("utf-8", "replace").decode("utf-8")
+    path.write_text(clean, encoding="utf-8")
 
 
 def collect(root: Path) -> list[dict[str, str]]:
     files: list[dict[str, str]] = []
+    total = 0
     for path in sorted(root.rglob("*")):
         if not path.is_file():
             continue
@@ -66,10 +71,13 @@ def collect(root: Path) -> list[dict[str, str]]:
                 continue
             raw = path.read_bytes()
             if len(raw) > MAX_IMAGE_BYTES:
-                raise ValueError("A sandbox file is too large.")
+                raise ValueError(f"{relative} is too large for the sandbox.")
             text = f"data:{IMAGE_MIME[suffix]};base64,{base64.b64encode(raw).decode('ascii')}"
         if not text.startswith("data:image/") and len(text) > MAX_CHARS:
-            raise ValueError("A sandbox file is too large.")
+            raise ValueError(f"{relative} is too large for the sandbox.")
+        total += len(text)
+        if total > MAX_TOTAL_CHARS:
+            raise ValueError("This sandbox is too large.")
         files.append({"path": relative, "text": text})
         if len(files) > MAX_FILES:
             raise ValueError("This sandbox is too large.")
@@ -90,6 +98,8 @@ def command_args(value: object) -> list[str]:
 
 
 def main() -> None:
+    sys.stdin.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8")
     job = json.loads(sys.stdin.read() or "{}")
     root = Path(tempfile.mkdtemp(prefix="muselancer-job-"))
     try:

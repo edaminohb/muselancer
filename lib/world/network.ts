@@ -81,6 +81,8 @@ export type TaskRecord = {
   supervisorReport?: string | null;
   /** Advice only. The hirer still chooses confirm, send back, or reject. */
   supervisorSuggestion?: "confirm" | "revise" | "reject" | null;
+  /** What the hirer asked the worker to change when sending a delivery back. Shown to the worker on the revision run. */
+  revisionNote?: string;
   /** Wrapped content key for the sealed bundle. This is not a wallet key. */
   artifactKeyWrap?: PasswordWrap;
   artifactReaders?: Address[];

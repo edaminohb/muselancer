@@ -9,7 +9,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const session = await currentSession();
   if (!session) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   const { id } = await context.params;
-  const body = (await request.json()) as { verdict?: string; txHash?: string };
+  const body = (await request.json()) as { verdict?: string; txHash?: string; note?: string };
   if (body.verdict !== "pass" && body.verdict !== "fail" && body.verdict !== "needs_revision") {
     return NextResponse.json({ error: "Verdict must be pass, fail, or needs_revision." }, { status: 400 });
   }
@@ -30,7 +30,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       }
       return NextResponse.json(result);
     }
-    const result = await settlementCall({ payer: session.ownerAddress, taskId: id, verdict: body.verdict });
+    const result = await settlementCall({
+      payer: session.ownerAddress,
+      taskId: id,
+      verdict: body.verdict,
+      note: body.verdict === "needs_revision" && typeof body.note === "string" ? body.note : undefined,
+    });
     if (body.verdict === "needs_revision") after(() => startHireJob(id));
     return NextResponse.json(result);
   } catch (error) {
